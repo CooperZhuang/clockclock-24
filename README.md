@@ -6,7 +6,10 @@
 - 秒位：每 1 秒动一次，**0.8 秒**转完、停 0.2 秒等下秒；
 - 时:分 与 秒之间留一道冒号宽的空隙，六位数字才不会糊成一片。
 
-单文件 HTML，零依赖零构建，双击就能跑。
+单文件 HTML，零依赖零构建，双击就能跑；外加一个原生 macOS 状态栏版。
+
+**在线体验：** <https://cooperzhuang.github.io/clockclock-24/>  
+**下载 App：** [Releases](https://github.com/CooperZhuang/clockclock-24/releases) —— 状态栏版，Apple Silicon / Intel 通用，macOS 13+
 
 ![浅色](docs/preview-light.png)
 
@@ -16,7 +19,19 @@
 
 ![转动](docs/preview-sweep.png)
 
-## 运行
+## 安装（macOS 状态栏版）
+
+从 [Releases](https://github.com/CooperZhuang/clockclock-24/releases) 下 `ClockClock-1.0.0.dmg`（或 `.zip`），把 `ClockClock.app` 拖进「应用程序」，打开后菜单栏右侧就会出现时钟。
+
+首次打开可能被 Gatekeeper 拦（这个包是 ad-hoc 签名、没有做苹果公证）：右键点图标 →「打开」，或者
+
+```bash
+xattr -dr com.apple.quarantine /Applications/ClockClock.app
+```
+
+不想下二进制也可以自己编：`cd macos && ./build.sh`（要 Command Line Tools，不需要 Xcode）。
+
+## 运行（网页版）
 
 ```bash
 open index.html                                  # 直接开文件
@@ -46,9 +61,12 @@ python3 -m http.server 8788                      # 或者起个静态服务，ht
 
 ```bash
 cd macos
-./build.sh                      # 编译出 build/ClockClock.app（本机已有 CLT，不需要 Xcode）
+./build.sh                      # 编译出 build/ClockClock.app（要 Command Line Tools，不需要 Xcode）
 open build/ClockClock.app       # 跑到菜单栏里
+./package.sh                    # 出可分发包：dist/ClockClock-1.0.0.zip / .dmg / SHA256SUMS.txt
 ```
+
+`package.sh` 会同时编 arm64 和 x86_64 再 lipo 成通用二进制，ad-hoc 签名。
 
 点菜单栏上的时钟：
 
@@ -67,7 +85,7 @@ open build/ClockClock.app       # 跑到菜单栏里
 
 调试钩子（不影响正常使用、不写日志）：`kill -USR1 <pid>` 把当前这一帧导出成 `/tmp/clockclock-menubar-frame.png`；`kill -USR2 <pid>` 切换开机自启（等价于点菜单）。
 
-打算长期放菜单栏的话，先把 `build/ClockClock.app` 拷到 `/Applications`，再开「开机自启」——登录项会记住当时那个路径。
+打算长期放菜单栏的话，先把 `ClockClock.app` 拷到 `/Applications`，再开「开机自启」——登录项会记住当时那个路径。
 
 ## 字形怎么来的
 
@@ -100,6 +118,10 @@ index.html              # 网页版全部内容：标记 + 样式 + 逻辑 + 字
 docs/preview-*.png      # 网页版预览图（浅色 / 暗色 / 转动中）
 docs/menubar-mock.png   # 菜单栏版的真实尺寸样张
 macos/main.swift        # 状态栏版（同一套字形表，重写了一遍绘制）
-macos/Info.plist        # LSUIElement = 1，不占 Dock
+macos/Info.plist        # LSUIElement = 1，不占 Dock；版本号在这里改
+macos/AppIcon.icns      # 图标（make-icon.py 生成）
 macos/build.sh          # swiftc 编译 + ad-hoc 签名 → build/ClockClock.app
+macos/package.sh        # 通用二进制 + zip/dmg + SHA256SUMS → dist/
 ```
+
+MIT License。

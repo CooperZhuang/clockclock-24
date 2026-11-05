@@ -482,8 +482,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   @objc private func openWebPage(_ sender: NSMenuItem) {
+    // 从源码目录跑就打开本地 index.html；下载安装的 App 里没有这个文件，回落到在线版
     if let path = sender.representedObject as? String, FileManager.default.fileExists(atPath: path) {
       NSWorkspace.shared.open(URL(fileURLWithPath: path))
+      return
+    }
+    if let url = URL(string: "https://cooperzhuang.github.io/clockclock-24/") {
+      NSWorkspace.shared.open(url)
     }
   }
 
