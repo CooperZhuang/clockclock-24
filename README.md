@@ -93,7 +93,7 @@ cd macos
 | 秒位平滑 | 默认关。开了秒位也做 0.8s 平滑——22pt 高度下一秒只走 6°、位移不到 1px，代价是重绘从 3 帧/秒涨到 9 帧/秒 |
 | 电池时秒位直接跳 | 默认开。插着电照「秒位平滑」走，切到电池就强制秒位直接落位省电 |
 | 换字时长 | 时:分换字用多久：3 / 5 / **10（默认）** / 15 / 30 秒 |
-| 旋转动画 | 机械（默认）/ 匀速 / 惯性 / 回弹 / 急停——时:分换字用的缓动曲线，秒位跳动也跟随 |
+| 旋转动画 | 机械（默认）/ 匀速 / 惯性 / 回弹 / 急停——时:分换字用的缓动曲线，秒位跳动也跟随。回弹是「冲过头 → 0.5 秒内收回」，过冲量固定最多 14°，不随转圈圈数放大 |
 | 自动检查更新 | 默认开：启动 8 秒后查一次，之后每 6 小时查 GitHub 最新 Release |
 | 检查更新 | 手动查；有新版本时菜单顶部会多一条「有新版本 x.y.z（点开查看）」 |
 | 开机自启 | 装 / 卸 `~/Library/LaunchAgents/com.cooper.clockclock-menubar.plist`（默认不装） |
@@ -104,7 +104,7 @@ cd macos
 
 默认**不写任何日志**。要看调试信息用 `CLOCKCLOCK_LOG=1` 启动，日志落在 `/tmp/clockclock-menubar.log`。
 
-调试钩子（不影响正常使用、不写日志）：`kill -USR1 <pid>` 把当前这一帧导出成 `/tmp/clockclock-menubar-frame.png`；`kill -USR2 <pid>` 切换开机自启（等价于点菜单）。
+调试钩子（不影响正常使用、不写日志）：`kill -USR1 <pid>` 导出当前帧到 `/tmp/clockclock-menubar-frame.png`；`kill -USR2 <pid>` 切换开机自启。要看日志用 `CLOCKCLOCK_LOG=1` 启动（写 `/tmp/clockclock-menubar.log`），`CLOCKCLOCK_TRACE=1` 会按 10Hz 记录指针动画曲线。
 
 打算长期放菜单栏的话，先把 `ClockClock.app` 拷到 `/Applications`，再开「开机自启」——登录项会记住当时那个路径。
 

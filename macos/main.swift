@@ -58,6 +58,9 @@ enum SpinStyle: Int, CaseIterable {
     }
   }
 
+  /// 回弹单独实现：比例过冲在 720° 大转圈时会离谱，改成「绝对角度 + 短尾巴」
+  var isBounce: Bool { self == .bounce }
+
   /// CSS cubic-bezier(x1, y1, x2, y2)
   var curve: (Double, Double, Double, Double) {
     switch self {
@@ -80,9 +83,26 @@ struct Hand {
   var c2x: Double = 0.28
   var c2y: Double = 1
 
+  // 回弹专用：先冲到 to + over，再用 tailDur 秒收回 to
+  var bounce = false
+  var over: Double = 0
+  var tailDur: Double = 0
+
   func angle(at now: Double) -> Double {
     if dur <= 0.001 { return to }
-    let p = min(1, max(0, (now - start) / dur))
+    let t = now - start
+    if bounce, tailDur > 0, dur > tailDur {
+      let mainDur = dur - tailDur
+      if t <= mainDur {
+        let u = min(1, max(0, t / mainDur))
+        let e = 1 - pow(1 - u, 3)                  // 快到位置（冲到 to+over）
+        return from + (over - from) * e
+      }
+      let u = min(1, max(0, (t - mainDur) / tailDur))
+      let e = 1 - pow(1 - u, 3)                    // 短尾巴收回 to
+      return over + (to - over) * e
+    }
+    let p = min(1, max(0, t / dur))
     let e = Easing.cubicBezier(p, c1x, c1y, c2x, c2y)
     return from + (to - from) * e
   }
@@ -218,8 +238,11 @@ final class ClockClock {
           if delta < 0 { delta += 360 }
           if spin { delta += 360 }
           if delta <= 0.0005 { continue }
+          let over = spinStyle.isBounce ? min(14, delta * 0.05) : 0
+          let tail = spinStyle.isBounce ? min(0.5, max(0.2, dur * 0.05)) : 0
           hands[slot] = Hand(from: current, to: current + delta, start: now, dur: dur,
-                             c1x: curve.0, c1y: curve.1, c2x: curve.2, c2y: curve.3)
+                             c1x: curve.0, c1y: curve.1, c2x: curve.2, c2y: curve.3,
+                             bounce: spinStyle.isBounce, over: current + delta + over, tailDur: tail)
         }
       }
     }
@@ -398,6 +421,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     signalSources.append(src2)
 
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in self?.reportFrame() }
+
+    // 调试：CLOCKCLOCK_TRACE=1 时以 10Hz 记录第一根针的动画曲线
+    if ProcessInfo.processInfo.environment["CLOCKCLOCK_TRACE"] == "1" {
+      let trace = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
+        guard let self else { return }
+        let n = CACurrentMediaTime()
+        let h = self.clock.hands[0]
+        self.appendLog(String(format: "trace start=%.3f now=%.3f from=%.2f to=%.2f over=%.2f tail=%.2f angle=%.2f",
+                              h.start, n, h.from, h.to, h.over, h.tailDur, h.angle(at: n)))
+      }
+      RunLoop.main.add(trace, forMode: .common)
+    }
 
     // 自动检查更新（默认开，启动 8 秒后一次，之后每 6 小时）
     if defaults.object(forKey: "autoUpdateCheck") as? Bool ?? true {
@@ -610,7 +645,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     NSGraphicsContext.restoreGraphicsState()
     try? rep.representation(using: .png, properties: [:])?
       .write(to: URL(fileURLWithPath: "/tmp/clockclock-menubar-frame.png"))
-    appendLog("dump renders=\(renderCount) sec=\(clock.second) blink=\(clock.blinkOn)")
+    let t = CACurrentMediaTime()
+    let probe = (0..<4).map { String(format: "%.2f", clock.hands[$0].angle(at: t)) }.joined(separator: ",")
+    appendLog("dump renders=\(renderCount) sec=\(clock.second) blink=\(clock.blinkOn) probe=\(probe)")
   }
 
   private func reportFrame() {
