@@ -9,7 +9,7 @@
 单文件 HTML，零依赖零构建，双击就能跑；外加一个原生 macOS 状态栏版。
 
 **在线体验：** <https://cooperzhuang.github.io/clockclock-24/>  
-**下载 App：** [Releases](https://github.com/CooperZhuang/clockclock-24/releases) —— 状态栏版，macOS 13+。通用版（Apple Silicon + Intel）和 Apple Silicon 专版各有一个包
+**下载 App：** [Releases](https://github.com/CooperZhuang/clockclock-24/releases) —— 状态栏版，macOS 13+，只出 dmg：通用版（Apple Silicon + Intel）和 Apple Silicon 专版各一个
 
 ![浅色](docs/preview-light.png)
 
@@ -25,8 +25,8 @@
 
 | 包 | 适用 |
 | --- | --- |
-| `ClockClock-1.1.0.dmg` / `.zip` | 通用版，Apple Silicon + Intel |
-| `ClockClock-1.1.0-arm64.dmg` / `.zip` | Apple Silicon 专版，体积小一半左右 |
+| `ClockClock-1.2.0.dmg` | 通用版，Apple Silicon + Intel |
+| `ClockClock-1.2.0-arm64.dmg` | Apple Silicon 专版，体积小一半左右 |
 
 打开 dmg 把 `ClockClock.app` 拖进「应用程序」，打开后菜单栏右侧就会出现时钟。
 
@@ -73,7 +73,14 @@ open build/ClockClock.app       # 跑到菜单栏里
 ./package.sh                    # 出可分发包：dist/ClockClock-1.0.0.zip / .dmg / SHA256SUMS.txt
 ```
 
-`package.sh` 会编两套：通用版（arm64 + x86_64 lipo）和 Apple Silicon 专版（arm64），各出 dmg/zip，再写 `SHA256SUMS.txt`；都是 ad-hoc 签名。
+`package.sh` 会编两套：通用版（arm64 + x86_64 lipo）和 Apple Silicon 专版（arm64），各出一个 dmg，再写 `SHA256SUMS.txt`；都是 ad-hoc 签名。
+
+发版一条命令（会顺手把本机 `/Applications/ClockClock.app` 换新并重启）：
+
+```bash
+cd macos
+./release.sh notes.md --publish    # 编译 → dmg → 本地更新 → commit/tag/push → GitHub Release
+```
 
 点菜单栏上的时钟：
 
@@ -85,12 +92,15 @@ open build/ClockClock.app       # 跑到菜单栏里
 | 平滑扫动 | 开：时:分 15 秒平滑转到位；关：每秒跳一格 |
 | 秒位平滑 | 默认关。开了秒位也做 0.8s 平滑——22pt 高度下一秒只走 6°、位移不到 1px，代价是重绘从 3 帧/秒涨到 9 帧/秒 |
 | 电池时秒位直接跳 | 默认开。插着电照「秒位平滑」走，切到电池就强制秒位直接落位省电 |
+| 换字时长 | 时:分换字用多久：3 / 5 / **10（默认）** / 15 / 30 秒 |
 | 旋转动画 | 机械（默认）/ 匀速 / 惯性 / 回弹 / 急停——时:分换字用的缓动曲线，秒位跳动也跟随 |
+| 自动检查更新 | 默认开：启动 8 秒后查一次，之后每 6 小时查 GitHub 最新 Release |
+| 检查更新 | 手动查；有新版本时菜单顶部会多一条「有新版本 x.y.z（点开查看）」 |
 | 开机自启 | 装 / 卸 `~/Library/LaunchAgents/com.cooper.clockclock-menubar.plist`（默认不装） |
 | 打开网页版 | 打开仓库根目录的 `index.html` |
 | 退出 | 关掉 |
 
-实测（2560×1440 @2x，`NSStatusBar.system.thickness = 22pt`）：状态栏项目宽 **116pt**（六位 + 冒号，图 109.6pt）、110pt（不画冒号）、81pt（四位 + 冒号）；重绘 3 帧/秒、常驻 CPU 约 0.9%；15 秒扫动期间约 5.5%；开「秒位平滑」后 9 帧/秒、CPU 约 4.7%。模拟电池供电（`CLOCKCLOCK_BATTERY=1`）时即使开着「秒位平滑」也回到 3 帧/秒。
+实测（2560×1440 @2x，`NSStatusBar.system.thickness = 22pt`）：状态栏项目宽 **116pt**（六位 + 冒号，图 109.6pt）、110pt（不画冒号）、81pt（四位 + 冒号）；重绘 3 帧/秒、常驻 CPU 约 0.9%；扫动期间约 5.5%；开「秒位平滑」后 9 帧/秒、CPU 约 4.7%。模拟电池供电（`CLOCKCLOCK_BATTERY=1`）时即使开着「秒位平滑」也回到 3 帧/秒。
 
 默认**不写任何日志**。要看调试信息用 `CLOCKCLOCK_LOG=1` 启动，日志落在 `/tmp/clockclock-menubar.log`。
 
@@ -132,7 +142,8 @@ macos/main.swift        # 状态栏版（同一套字形表，重写了一遍绘
 macos/Info.plist        # LSUIElement = 1，不占 Dock；版本号在这里改
 macos/AppIcon.icns      # 图标（make-icon.py 生成）
 macos/build.sh          # swiftc 编译 + ad-hoc 签名 → build/ClockClock.app
-macos/package.sh        # 通用二进制 + zip/dmg + SHA256SUMS → dist/
+macos/package.sh        # 通用版 + arm64 版 dmg + SHA256SUMS → dist/
+macos/release.sh        # 发版：打包 + 本地更新 + tag/push/Release
 ```
 
 MIT License。

@@ -23,7 +23,8 @@ let kSepColon: CGFloat = 0.90          // 组间额外间距（画冒号）
 let kPipRatio: CGFloat = 0.24          // 冒号圆点直径 / 面宽
 let kPipOffset: CGFloat = 0.44         // 冒号两点中心到中线的偏移 / 面宽
 
-let kSweepDuration: Double = 15        // 时:分换字时长（秒）
+let kSweepChoices: [Double] = [3, 5, 10, 15, 30]   // 时:分换字时长可选档位（秒）
+let kDefaultSweep: Double = 10                     // 默认 10 秒
 let kTickDuration: Double = 0.8        // 秒位每格时长（秒）
 let kFrameRate: Double = 10            // 动画帧率（这个尺寸下 10fps 已经看不出台阶）
 
@@ -123,6 +124,7 @@ final class ClockClock {
   var batteryThrottle = true
   var onBattery = false
   var spinStyle: SpinStyle = .mechanical
+  var sweepDuration: Double = kDefaultSweep
 
   private(set) var minute = ""
   private(set) var second = ""
@@ -188,7 +190,7 @@ final class ClockClock {
     let hasSeconds = time.count >= 6
     if hhmm != minute {
       minute = hhmm
-      setDigits(time, from: 0, to: 3, dur: smooth ? kSweepDuration : 0.001, spin: smooth, now: now)
+      setDigits(time, from: 0, to: 3, dur: smooth ? sweepDuration : 0.001, spin: smooth, now: now)
     }
     guard hasSeconds else { return }
     let ss = String(time.suffix(2))
@@ -286,6 +288,24 @@ final class ClockClock {
   }
 }
 
+// MARK: - 版本
+
+func versionParts(_ v: String) -> [Int] {
+  v.trimmingCharacters(in: CharacterSet(charactersIn: "vV "))
+    .split(separator: ".")
+    .map { Int($0) ?? 0 }
+}
+
+func isVersionNewer(_ remote: String, than local: String) -> Bool {
+  let r = versionParts(remote), l = versionParts(local)
+  for i in 0..<max(r.count, l.count) {
+    let a = i < r.count ? r[i] : 0
+    let b = i < l.count ? l[i] : 0
+    if a != b { return a > b }
+  }
+  return false
+}
+
 // MARK: - 电源
 
 func currentPowerIsBattery() -> Bool {
@@ -305,6 +325,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var signalSources: [DispatchSourceSignal] = []
   private var renderCount = 0
 
+  private var latestTag: String?
+  private var latestURL: URL?
+  private var hasUpdate = false
+  private var updateItem: NSMenuItem?
+  private var checkItem: NSMenuItem?
+  private var autoCheckTimer: Timer?
+
+  private var localVersion: String {
+    Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
+  }
+
+  private let repo = "CooperZhuang/clockclock-24"
+
   private let defaults = UserDefaults.standard
   private let loginLabel = "com.cooper.clockclock-menubar"
   private var appPath: String { Bundle.main.bundlePath }
@@ -318,6 +351,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     clock.smoothSeconds = d.object(forKey: "smoothSeconds") as? Bool ?? false
     clock.batteryThrottle = d.object(forKey: "batteryThrottle") as? Bool ?? true
     clock.spinStyle = SpinStyle(rawValue: d.integer(forKey: "spinStyle")) ?? .mechanical
+    let sweep = d.integer(forKey: "sweepSeconds")
+    clock.sweepDuration = sweep > 0 ? Double(sweep) : kDefaultSweep
     clock.onBattery = currentPowerIsBattery()
 
     statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -363,6 +398,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     signalSources.append(src2)
 
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in self?.reportFrame() }
+
+    // 自动检查更新（默认开，启动 8 秒后一次，之后每 6 小时）
+    if defaults.object(forKey: "autoUpdateCheck") as? Bool ?? true {
+      DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in self?.checkForUpdates(manual: false) }
+      autoCheckTimer = Timer.scheduledTimer(withTimeInterval: 6 * 3600, repeats: true) { [weak self] _ in
+        self?.checkForUpdates(manual: false)
+      }
+      if let t = autoCheckTimer { RunLoop.main.add(t, forMode: .common) }
+    }
   }
 
   // MARK: 菜单
@@ -389,8 +433,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     spin.submenu = sub
     menu.addItem(spin)
 
+    let sweepItem = NSMenuItem(title: "换字时长", action: nil, keyEquivalent: "")
+    let sweepMenu = NSMenu()
+    for secs in kSweepChoices {
+      let i = NSMenuItem(title: "\(Int(secs)) 秒", action: #selector(pickSweepDuration(_:)), keyEquivalent: "")
+      i.target = self
+      i.tag = Int(secs)
+      sweepMenu.addItem(i)
+    }
+    sweepItem.submenu = sweepMenu
+    menu.addItem(sweepItem)
+
     menu.addItem(.separator())
     menu.addItem(item("开机自启", #selector(toggleLogin), nil, state: isLoginInstalled))
+    menu.addItem(item("自动检查更新", #selector(toggleAutoCheck), nil,
+                      state: defaults.object(forKey: "autoUpdateCheck") as? Bool ?? true))
+    let update = item("有新版本", #selector(openReleasePage), nil)
+    update.isHidden = true
+    updateItem = update
+    menu.addItem(update)
+    let check = item("检查更新", #selector(checkUpdatesNow), nil)
+    checkItem = check
+    menu.addItem(check)
     if let web = Bundle.main.object(forInfoDictionaryKey: "ClockClockWebPage") as? String {
       let open = item("打开网页版", #selector(openWebPage), nil)
       open.representedObject = web
@@ -428,9 +492,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       default: break
       }
     }
-    if let spin = menu.items.first(where: { $0.title == "旋转动画" }), let sub = spin.submenu {
-      for i in sub.items { i.state = i.tag == clock.spinStyle.rawValue ? .on : .off }
+    for i in menu.items {
+      if i.title == "旋转动画", let sub = i.submenu {
+        for m in sub.items { m.state = m.tag == clock.spinStyle.rawValue ? .on : .off }
+      }
+      if i.title == "换字时长", let sub = i.submenu {
+        i.isEnabled = clock.smooth
+        for m in sub.items { m.state = Double(m.tag) == clock.sweepDuration ? .on : .off }
+      }
     }
+    updateItem?.isHidden = !hasUpdate
+    if hasUpdate, let tag = latestTag { updateItem?.title = "有新版本 \(tag)（点开查看）" }
   }
 
   // MARK: 状态推进
@@ -613,6 +685,93 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     clock.spinStyle = SpinStyle(rawValue: sender.tag) ?? .mechanical
     defaults.set(sender.tag, forKey: "spinStyle")
     refreshMenuStates()
+  }
+
+  @objc private func pickSweepDuration(_ sender: NSMenuItem) {
+    clock.sweepDuration = Double(sender.tag)
+    defaults.set(sender.tag, forKey: "sweepSeconds")
+    refreshMenuStates()
+    appendLog("sweepDuration=\(Int(clock.sweepDuration))")
+  }
+
+  @objc private func toggleAutoCheck() {
+    let on = !(defaults.object(forKey: "autoUpdateCheck") as? Bool ?? true)
+    defaults.set(on, forKey: "autoUpdateCheck")
+    if on {
+      checkForUpdates(manual: false)
+      autoCheckTimer?.invalidate()
+      autoCheckTimer = Timer.scheduledTimer(withTimeInterval: 6 * 3600, repeats: true) { [weak self] _ in
+        self?.checkForUpdates(manual: false)
+      }
+      if let t = autoCheckTimer { RunLoop.main.add(t, forMode: .common) }
+    } else {
+      autoCheckTimer?.invalidate()
+      autoCheckTimer = nil
+    }
+    refreshMenuStates()
+  }
+
+  @objc private func checkUpdatesNow() {
+    checkForUpdates(manual: true)
+  }
+
+  @objc private func openReleasePage() {
+    guard let url = latestURL else { return }
+    NSWorkspace.shared.open(url)
+  }
+
+  private func flashCheckItem(_ text: String) {
+    checkItem?.title = text
+    DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
+      self?.checkItem?.title = "检查更新"
+    }
+  }
+
+  private func checkForUpdates(manual: Bool) {
+    if let fake = ProcessInfo.processInfo.environment["CLOCKCLOCK_FAKE_LATEST"] {
+      latestTag = fake
+      latestURL = URL(string: "https://github.com/\(repo)/releases")
+      hasUpdate = isVersionNewer(fake, than: localVersion)
+      updateItem?.title = "有新版本 \(fake)（点开查看）"
+      updateItem?.isHidden = !hasUpdate
+      refreshMenuStates()
+      appendLog("update fake=\(fake) newer=\(hasUpdate)")
+      if manual { flashCheckItem(hasUpdate ? "发现新版本 \(fake)" : "已是最新（\(localVersion)）") }
+      return
+    }
+    // 走 releases.atom：没有 API 60 次/小时的限制（这台机的出口 IP 经常被限）
+    guard let url = URL(string: "https://github.com/\(repo)/releases.atom") else { return }
+    var request = URLRequest(url: url, timeoutInterval: 12)
+    request.setValue("ClockClock/\(localVersion)", forHTTPHeaderField: "User-Agent")
+    URLSession.shared.dataTask(with: request) { [weak self] data, _, error in
+      guard let self else { return }
+      var remote: String?
+      if let data, let text = String(data: data, encoding: .utf8),
+         let marker = text.range(of: "/releases/tag/") {
+        var tag = ""
+        for ch in text[marker.upperBound...] {
+          if ch.isLetter || ch.isNumber || ch == "." || ch == "-" || ch == "_" { tag.append(ch) } else { break }
+        }
+        if !tag.isEmpty { remote = tag }
+      }
+      DispatchQueue.main.async {
+        guard let tag = remote else {
+          self.appendLog("update check failed: \(error?.localizedDescription ?? "no tag in feed")")
+          if manual { self.flashCheckItem("检查更新失败") }
+          return
+        }
+        self.latestTag = tag
+        self.latestURL = URL(string: "https://github.com/\(self.repo)/releases/tag/\(tag)")
+        self.hasUpdate = isVersionNewer(tag, than: self.localVersion)
+        self.updateItem?.title = "有新版本 \(tag)（点开查看）"
+        self.updateItem?.isHidden = !self.hasUpdate
+        self.refreshMenuStates()
+        self.appendLog("update check: remote=\(tag) local=\(self.localVersion) newer=\(self.hasUpdate)")
+        if manual {
+          self.flashCheckItem(self.hasUpdate ? "发现新版本 \(tag)" : "已是最新（\(self.localVersion)）")
+        }
+      }
+    }.resume()
   }
 
   @objc private func toggleLogin() {
