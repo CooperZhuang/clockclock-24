@@ -23,7 +23,10 @@
                     0 3px 10px rgba(46, 38, 26, 0.06),
                     0 0 0 1px rgba(46, 38, 26, 0.05);
     --ease: cubic-bezier(0.62, 0.02, 0.28, 1);
-    --turn: 900ms;
+    --turn: 30s;          /* 一圈走完用掉半分钟：0-30s 在转，30-60s 静止 */
+    --cell: min(9.7vw, 22.4vh);
+    --cell: min(9.7vw, 22.4svh);
+    --pad: calc(var(--cell) * 0.38);
   }
 
   @media (prefers-color-scheme: dark) {
@@ -57,10 +60,9 @@
     -webkit-font-smoothing: antialiased;
   }
 
+  .stage { position: relative; display: grid; place-items: center; }
+
   .clock {
-    --cell: min(9.7vw, 22.4vh);
-    --cell: min(9.7vw, 22.4svh);
-    --pad: calc(var(--cell) * 0.38);
     display: grid;
     grid-template-columns: repeat(8, var(--cell));
     grid-template-rows: repeat(3, var(--cell));
@@ -118,16 +120,95 @@
     background: var(--pin);
   }
 
+  /* 秒表读数：宽屏时落在面板下沿的内边距里，窄屏时退到面板下方 */
+  .timer {
+    position: absolute;
+    left: 50%;
+    top: calc(100% + var(--pad) * 0.5);
+    transform: translateX(-50%);
+    font: 300 clamp(13px, calc(var(--cell) * 0.22), 110px) / 1 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+    opacity: 0.4;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: opacity 0.2s var(--ease);
+  }
+
+  .timer:hover { opacity: 0.66; }
+  .timer__cs { margin-left: 0.06em; font-size: 0.62em; opacity: 0.72; }
+  .timer[hidden] { display: none; }
+
+  @media (min-width: 780px) and (min-height: 460px) {
+    .timer { top: auto; bottom: calc(var(--pad) * 0.16); }
+  }
+
+  .toggle {
+    position: fixed;
+    right: max(14px, env(safe-area-inset-right));
+    bottom: max(12px, env(safe-area-inset-bottom));
+    padding: 9px;
+    border: 0;
+    background: none;
+    color: var(--ink);
+    opacity: 0.28;
+    cursor: pointer;
+    transition: opacity 0.25s var(--ease);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .toggle:hover,
+  .toggle:focus-visible { opacity: 0.85; }
+  .toggle[aria-pressed="true"] { opacity: 0.5; }
+  .toggle:focus-visible { outline: 1px solid currentColor; outline-offset: 4px; border-radius: 999px; }
+
+  .toggle__track {
+    position: relative;
+    display: block;
+    width: 34px;
+    height: 19px;
+    border: 1px solid currentColor;
+    border-radius: 999px;
+  }
+
+  .toggle__knob {
+    position: absolute;
+    top: 50%;
+    left: 3px;
+    width: 11px;
+    height: 11px;
+    margin-top: -5.5px;
+    border-radius: 50%;
+    background: currentColor;
+    transition: transform 0.22s var(--ease);
+  }
+
+  .toggle[aria-pressed="true"] .toggle__knob { transform: translateX(15px); }
+
   /* before the first sweep the hands are set without transition */
-  .boot .pivot { transition: none; }
+  .boot .pivot,
+  .no-anim .pivot { transition: none; }
 
   @media (prefers-reduced-motion: reduce) {
     :root { --turn: 240ms; }
+    .toggle__knob { transition: none; }
   }
 </style>
 </head>
 <body>
-  <main class="clock boot" id="clock" role="img" aria-label="ClockClock"></main>
+  <div class="stage">
+    <main class="clock boot" id="clock" role="img" aria-label="ClockClock"></main>
+    <div class="timer" id="timer" hidden title="点击开始 / 暂停，双击归零">
+      <span class="timer__main">00:00</span><span class="timer__cs">.00</span>
+    </div>
+  </div>
+
+  <button class="toggle" id="toggle" type="button" aria-pressed="false" aria-label="秒表" title="秒表">
+    <span class="toggle__track"><span class="toggle__knob"></span></span>
+  </button>
 
 <script>
 (() => {
@@ -210,9 +291,16 @@
     document.title = readable;
   }
 
-  const frozen = new URLSearchParams(location.search).get('at');
+  const params = new URLSearchParams(location.search);
+  const frozen = params.get('at');
   const still = matchMedia('(prefers-reduced-motion: reduce)');
   const paused = frozen && /^([01]\d|2[0-3])[0-5]\d$/.test(frozen);   // ?at=HHMM
+
+  // ?turn=<seconds> — how long one whole sweep takes (default 30, i.e. half a minute)
+  const turn = Number(params.get('turn'));
+  if (turn > 0 && !still.matches) {
+    document.documentElement.style.setProperty('--turn', `${Math.min(60, Math.max(0.2, turn))}s`);
+  }
 
   let timer = 0;
 
@@ -241,11 +329,86 @@
       if (document.hidden) {
         clearTimeout(timer);
       } else {
+        // back from the background: jump instead of spending another half minute turning
+        clock.classList.add('no-anim');
         paint(new Date(), false);
+        void clock.offsetWidth;
+        requestAnimationFrame(() => clock.classList.remove('no-anim'));
         schedule();
       }
     });
   }
+  /* ---------- 秒表（开关控制，叠在面板上） ---------- */
+  const timerEl = document.getElementById('timer');
+  const timerMain = timerEl.querySelector('.timer__main');
+  const timerCs = timerEl.querySelector('.timer__cs');
+  const toggleEl = document.getElementById('toggle');
+  const STORE = 'clockclock.stopwatch';
+
+  let spent = 0;        // ms accumulated while stopped
+  let since = 0;        // performance.now() at the last start
+  let running = false;
+  let rafId = 0;
+  let shown = false;
+
+  const pref = {
+    // 第一次打开就叠上秒表；之后记住用户自己拨的开关位置
+    get() { try { const v = localStorage.getItem(STORE); return v === null ? true : v === '1'; } catch (e) { return true; } },
+    set(on) { try { localStorage.setItem(STORE, on ? '1' : '0'); } catch (e) { /* private mode */ } }
+  };
+
+  function drawTimer() {
+    const cs = Math.floor((spent + (running ? performance.now() - since : 0)) / 10);
+    timerMain.textContent =
+      String(Math.floor(cs / 6000)).padStart(2, '0') + ':' +
+      String(Math.floor(cs / 100) % 60).padStart(2, '0');
+    timerCs.textContent = '.' + String(cs % 100).padStart(2, '0');
+  }
+
+  function frame() { drawTimer(); rafId = requestAnimationFrame(frame); }
+
+  function startTimer() {
+    if (running || !shown) return;
+    running = true;
+    since = performance.now();
+    rafId = requestAnimationFrame(frame);
+  }
+
+  function pauseTimer() {
+    if (!running) return;
+    spent += performance.now() - since;
+    running = false;
+    cancelAnimationFrame(rafId);
+    drawTimer();
+  }
+
+  function resetTimer() {
+    cancelAnimationFrame(rafId);
+    running = false;
+    spent = 0;
+    drawTimer();
+  }
+
+  function showTimer(on) {
+    shown = on;
+    timerEl.hidden = !on;
+    toggleEl.setAttribute('aria-pressed', String(on));
+    pref.set(on);
+    if (on) { resetTimer(); startTimer(); } else { pauseTimer(); }
+  }
+
+  toggleEl.addEventListener('click', () => showTimer(!shown));
+  timerEl.addEventListener('click', () => (running ? pauseTimer() : startTimer()));
+  timerEl.addEventListener('dblclick', resetTimer);
+  document.addEventListener('keydown', (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const key = e.key.toLowerCase();
+    if (key === 's') showTimer(!shown);
+    else if (key === ' ' && shown) { e.preventDefault(); running ? pauseTimer() : startTimer(); }
+    else if (key === 'r' && shown) resetTimer();
+  });
+
+  showTimer(pref.get());
 })();
 </script>
 </body>
