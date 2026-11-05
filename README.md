@@ -19,6 +19,16 @@
 
 ![转动](docs/preview-sweep.png)
 
+## 灵感来源
+
+这个项目是在复刻 **ClockClock 24** —— 瑞典工作室 **Humans Since 1982**（Per Emanuelsson & Bastian Bischoff）的作品：24 个表盘、48 根指针，每块盘里两根针各自转到某个角度，一起凑出 HH:MM。原作是壁挂式动态雕塑，限量制作，在 MoMA Design Store 等设计商店发售过。
+
+- 工作室官网：<https://www.humanssince1982.com/>
+- 最初照着做的是一张实拍照片：白面板、浅灰凹碗表盘、纯黑指针
+- 本项目与 Humans Since 1982 无关，是非官方的个人致敬；表盘、指针、字形都是按自己理解重画的，源码 MIT
+
+原作只显示到分钟；这里的网页版和状态栏版把秒补到了末尾（36 个表盘 / 72 根指针），这是本项目自己的延伸。
+
 ## 安装（macOS 状态栏版）
 
 从 [Releases](https://github.com/CooperZhuang/clockclock-24/releases) 下载：
