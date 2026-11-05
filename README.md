@@ -38,6 +38,34 @@ python3 -m http.server 8788                      # 或者起个静态服务，ht
 | 动效偏好 | 系统开了「减弱动态效果」时：时:分 300ms、秒位 120ms |
 | 标签页标题 | 跟随当前时间为 `HH:MM` |
 
+## 状态栏版（macOS）
+
+![菜单栏](docs/menubar-mock.png)
+
+同一套字形搬到系统状态栏：Swift + AppKit 写的小程序，一个 `NSStatusItem`，模板图自动跟随浅色 / 深色菜单栏（菜单栏里只画指针，画不了盘面）。
+
+```bash
+cd macos
+./build.sh                      # 编译出 build/ClockClock.app（本机已有 CLT，不需要 Xcode）
+open build/ClockClock.app       # 跑到菜单栏里
+```
+
+点菜单栏上的时钟：
+
+| 菜单项 | 说明 |
+| --- | --- |
+| 显示秒 | 六位 HH:MM:SS（约 107pt 宽）↔ 四位 HH:MM（约 75pt） |
+| 平滑扫动 | 开：时:分 15 秒平滑转到位；关：每秒跳一格。秒位在 22pt 高度下一秒只走 6°，位移不到 1px，所以一律直接落位 |
+| 开机自启 | 装 / 卸 `~/Library/LaunchAgents/com.cooper.clockclock-menubar.plist`（默认不装） |
+| 打开网页版 | 打开仓库根目录的 `index.html` |
+| 退出 | 关掉 |
+
+实测（2560×1440 @2x，`NSStatusBar.system.thickness = 22pt`）：状态栏项目宽 107pt（六位）/ 75pt（四位），常驻 CPU 约 1%，15 秒扫动期间约 5.5%。
+
+调试钩子：`kill -USR1 <pid>` 把当前这一帧导出成 `/tmp/clockclock-menubar-frame.png`；`kill -USR2 <pid>` 切换开机自启（等价于点菜单）。
+
+打算长期放菜单栏的话，先把 `build/ClockClock.app` 拷到 `/Applications`，再开「开机自启」——登录项会记住当时那个路径。
+
 ## 字形怎么来的
 
 一个数字占 **2 列 × 3 行 = 6 个表盘 = 12 根指针**，对应七段数码管的 a–g 笔画：
@@ -65,6 +93,10 @@ python3 -m http.server 8788                      # 或者起个静态服务，ht
 ## 文件
 
 ```
-index.html            # 全部内容：标记 + 样式 + 逻辑 + 字形表
-docs/preview-*.png    # 预览图（浅色 / 暗色 / 转动中）
+index.html              # 网页版全部内容：标记 + 样式 + 逻辑 + 字形表
+docs/preview-*.png      # 网页版预览图（浅色 / 暗色 / 转动中）
+docs/menubar-mock.png   # 菜单栏版的真实尺寸样张
+macos/main.swift        # 状态栏版（同一套字形表，重写了一遍绘制）
+macos/Info.plist        # LSUIElement = 1，不占 Dock
+macos/build.sh          # swiftc 编译 + ad-hoc 签名 → build/ClockClock.app
 ```
