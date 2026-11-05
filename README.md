@@ -10,6 +10,10 @@
 
 ![暗色](docs/preview-dark.png)
 
+转动过程中（截图定格）：
+
+![转动](docs/preview-sweep.png)
+
 ## 运行
 
 ```bash
@@ -61,5 +65,5 @@ python3 -m http.server 8788                      # 或者起个静态服务，ht
 
 ```
 index.html            # 全部内容：标记 + 样式 + 逻辑 + 字形表
-docs/preview-*.png    # 预览图
+docs/preview-*.png    # 预览图（浅色 / 暗色 / 转动中）
 ```
