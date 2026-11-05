@@ -55,14 +55,17 @@ open build/ClockClock.app       # 跑到菜单栏里
 | 菜单项 | 说明 |
 | --- | --- |
 | 显示秒 | 六位 HH:MM:SS（约 107pt 宽）↔ 四位 HH:MM（约 75pt） |
-| 平滑扫动 | 开：时:分 15 秒平滑转到位；关：每秒跳一格。秒位在 22pt 高度下一秒只走 6°，位移不到 1px，所以一律直接落位 |
+| 平滑扫动 | 开：时:分 15 秒平滑转到位；关：每秒跳一格 |
+| 秒位平滑 | 默认关。开了秒位也做 0.8s 平滑——22pt 高度下一秒只走 6°、位移不到 1px，代价是重绘从 3 帧/秒涨到 10 帧/秒 |
 | 开机自启 | 装 / 卸 `~/Library/LaunchAgents/com.cooper.clockclock-menubar.plist`（默认不装） |
 | 打开网页版 | 打开仓库根目录的 `index.html` |
 | 退出 | 关掉 |
 
-实测（2560×1440 @2x，`NSStatusBar.system.thickness = 22pt`）：状态栏项目宽 107pt（六位）/ 75pt（四位），常驻 CPU 约 1%，15 秒扫动期间约 5.5%。
+实测（2560×1440 @2x，`NSStatusBar.system.thickness = 22pt`）：状态栏项目宽 107pt（六位）/ 75pt（四位）；重绘 3 帧/秒、常驻 CPU 约 0.9%；15 秒扫动期间约 5.5%；开「秒位平滑」后重绘 10 帧/秒、CPU 约 4.7%。
 
-调试钩子：`kill -USR1 <pid>` 把当前这一帧导出成 `/tmp/clockclock-menubar-frame.png`；`kill -USR2 <pid>` 切换开机自启（等价于点菜单）。
+默认**不写任何日志**。要看调试信息用 `CLOCKCLOCK_LOG=1` 启动，日志落在 `/tmp/clockclock-menubar.log`。
+
+调试钩子（不影响正常使用、不写日志）：`kill -USR1 <pid>` 把当前这一帧导出成 `/tmp/clockclock-menubar-frame.png`；`kill -USR2 <pid>` 切换开机自启（等价于点菜单）。
 
 打算长期放菜单栏的话，先把 `build/ClockClock.app` 拷到 `/Applications`，再开「开机自启」——登录项会记住当时那个路径。
 

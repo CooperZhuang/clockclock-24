@@ -80,6 +80,8 @@ final class ClockClock {
   var hands: [Hand]
   var showSeconds = true
   var smooth = true
+  /// 强制秒位也做 0.8s 平滑（默认关：22pt 下位移不到 1px，纯烧 CPU）
+  var smoothSeconds = false
   /// 竖版：时:分 + 秒 = 6 位；否则只画 4 位
   private(set) var minute = ""
   private(set) var second = ""
@@ -136,9 +138,9 @@ final class ClockClock {
     let ss = String(time.suffix(2))
     if ss != second {
       second = ss
-      // 22pt 高度下秒针一秒只走 6°，真动画的位移不到 1px，直接落位更省电；
-      // 需要平滑的话把下面这行换成 `smooth ? kTickDuration : 0.001`
-      setDigits(time, from: 4, to: 5, dur: 0.001, spin: false, now: now)
+      // 22pt 高度下秒针一秒只走 6°，默认直接落位省电；菜单里可强制平滑
+      let dur = (smooth && smoothSeconds) ? kTickDuration : 0.001
+      setDigits(time, from: 4, to: 5, dur: dur, spin: false, now: now)
     }
   }
 
@@ -222,6 +224,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var lastDrawn = ""
   private var lastSignature = ""
   private var signalSources: [DispatchSourceSignal] = []
+  private var renderCount = 0
 
   private let defaults = UserDefaults.standard
   private let loginLabel = "com.cooper.clockclock-menubar"
@@ -230,6 +233,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   func applicationDidFinishLaunching(_ notification: Notification) {
     clock.showSeconds = defaults.object(forKey: "showSeconds") as? Bool ?? true
     clock.smooth = defaults.object(forKey: "smooth") as? Bool ?? true
+    clock.smoothSeconds = defaults.object(forKey: "smoothSeconds") as? Bool ?? false
 
     statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     statusItem.button?.imagePosition = .imageOnly
@@ -271,6 +275,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let menu = NSMenu()
     menu.addItem(item("显示秒", #selector(toggleSeconds), "s", state: clock.showSeconds))
     menu.addItem(item("平滑扫动", #selector(toggleSmooth), "l", state: clock.smooth))
+    menu.addItem(item("秒位平滑", #selector(toggleSmoothSeconds), "k", state: clock.smoothSeconds))
     menu.addItem(.separator())
     menu.addItem(item("开机自启", #selector(toggleLogin), nil, state: isLoginInstalled))
     if let web = Bundle.main.object(forInfoDictionaryKey: "ClockClockWebPage") as? String {
@@ -295,7 +300,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     for i in menu.items {
       switch i.action {
       case #selector(toggleSeconds): i.state = clock.showSeconds ? .on : .off
-      case #selector(toggleSmooth): i.state = clock.smooth ? .on : .off
+      case #selector(toggleSmooth):
+        i.state = clock.smooth ? .on : .off
+      case #selector(toggleSmoothSeconds):
+        i.state = clock.smoothSeconds ? .on : .off
+        i.isEnabled = clock.smooth
       case #selector(toggleLogin): i.state = isLoginInstalled ? .on : .off
       default: break
       }
@@ -324,7 +333,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       self.clock.apply(time, at: t)
       self.redraw()
       self.ensureRendering(at: t)
-      self.appendLog("tick=\(time)")
       self.scheduleTick()
     }
     RunLoop.main.add(tickTimer!, forMode: .common)
@@ -364,6 +372,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   private func renderImage() -> NSImage {
+    renderCount += 1
     let size = clock.imageSize
     let scale = NSScreen.main?.backingScaleFactor ?? 2
     let pxW = Int((size.width * scale).rounded(.up))
@@ -399,7 +408,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var logEnabled: Bool { ProcessInfo.processInfo.environment["CLOCKCLOCK_LOG"] == "1" }
 
   private func appendLog(_ line: String) {
-    guard logEnabled || line.hasPrefix("frame") else { return }
+    guard logEnabled else { return }
     let stamp = ISO8601DateFormatter().string(from: Date())
     let url = URL(fileURLWithPath: "/tmp/clockclock-menubar.log")
     let text = "\(stamp) \(line)\n"
@@ -437,7 +446,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
        let png = freshRep.representation(using: .png, properties: [:]) {
       try? png.write(to: URL(fileURLWithPath: "/tmp/clockclock-menubar-fresh.png"))
     }
-    appendLog("dumped frame size=\(size) reps=\(image.representations.map { "\($0.pixelsWide)x\($0.pixelsHigh)" }.joined(separator: ","))")
+    let n = CACurrentMediaTime()
+    let secAngles = (48..<72).map { String(format: "%.0f", clock.hands[$0].angle(at: n)) }.joined(separator: ",")
+    appendLog("dump renders=\(renderCount) sec=\(clock.second) angles=\(secAngles)")
   }
 
   // MARK: 动作
@@ -453,6 +464,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   @objc private func toggleSmooth() {
     clock.smooth.toggle()
     defaults.set(clock.smooth, forKey: "smooth")
+    refreshMenuStates()
+    applyStateNow()
+  }
+
+  @objc private func toggleSmoothSeconds() {
+    clock.smoothSeconds.toggle()
+    defaults.set(clock.smoothSeconds, forKey: "smoothSeconds")
     refreshMenuStates()
     applyStateNow()
   }
