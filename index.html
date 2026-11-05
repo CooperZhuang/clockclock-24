@@ -212,7 +212,7 @@
 
   const frozen = new URLSearchParams(location.search).get('at');
   const still = matchMedia('(prefers-reduced-motion: reduce)');
-  const paused = frozen && /^\d{4}$/.test(frozen);
+  const paused = frozen && /^([01]\d|2[0-3])[0-5]\d$/.test(frozen);   // ?at=HHMM
 
   let timer = 0;
 
@@ -228,14 +228,12 @@
 
   if (paused) {
     // static frame for screenshots: no transition at all
-    paint(new Date(2000, 0, 1, Number(frozen.slice(0, 2)) % 24, Number(frozen.slice(2)) % 60), false);
+    paint(new Date(2000, 0, 1, Number(frozen.slice(0, 2)), Number(frozen.slice(2))), false);
   } else {
     // boot: every hand starts at twelve, then the whole display sweeps to now
     requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        clock.classList.remove('boot');
-        paint(new Date(), !still.matches);
-      });
+      clock.classList.remove('boot');            // transitions become live
+      requestAnimationFrame(() => paint(new Date(), !still.matches));
     });
     schedule();
 

@@ -6,6 +6,8 @@
 
 ![浅色](docs/preview-light.png)
 
+![暗色](docs/preview-dark.png)
+
 ## 运行
 
 ```bash
