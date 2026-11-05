@@ -21,16 +21,6 @@ if [ -n "${CODESIGN_ID:-}" ]; then
   ./notarize.sh          # 有开发者证书时：签名 + 公证 + staple
 fi
 
-# ---- 本地更新（每次发版都做）----
-INSTALL="/Applications/ClockClock.app"
-pkill -f "ClockClock.app/Contents/MacOS/ClockClock" >/dev/null 2>&1 || true
-sleep 0.6
-rm -rf "$INSTALL"
-cp -R "build/ClockClock-universal.app" "$INSTALL"
-xattr -dr com.apple.quarantine "$INSTALL" >/dev/null 2>&1 || true
-open "$INSTALL"
-echo "本地已更新：${INSTALL}（v${VERSION}）"
-
 # ---- 发布 ----
 if [ "$PUBLISH" = "--publish" ]; then
   if [ -z "$NOTES" ] || [ ! -f "$NOTES" ]; then
@@ -62,4 +52,22 @@ print("tap cask ->", ver)
 TAPPATCH
     (cd "$TAP_DIR" && git add -A && git commit -q -m "cask: clockclock $VERSION" && git push -q origin main && echo "tap 已推送") || true
   fi
+fi
+
+# ---- 本地更新（每次发版都做；必须在 Release / cask 都推完之后）----
+INSTALL="/Applications/ClockClock.app"
+if HOMEBREW_NO_AUTO_UPDATE=1 brew list --cask clockclock >/dev/null 2>&1; then
+  echo "== 本机是 brew 装的，走 brew 升级"
+  ( cd "$(brew --repo CooperZhuang/tap)" && git pull -q ) || true
+  HOMEBREW_NO_AUTO_UPDATE=1 brew upgrade --cask clockclock \
+    || HOMEBREW_NO_AUTO_UPDATE=1 brew reinstall --cask clockclock
+  echo "本地已更新：${INSTALL}（v${VERSION}，brew 管理）"
+else
+  pkill -f "ClockClock.app/Contents/MacOS/ClockClock" >/dev/null 2>&1 || true
+  sleep 0.6
+  rm -rf "$INSTALL"
+  cp -R "build/ClockClock-universal.app" "$INSTALL"
+  xattr -dr com.apple.quarantine "$INSTALL" >/dev/null 2>&1 || true
+  open "$INSTALL"
+  echo "本地已更新：${INSTALL}（v${VERSION}）"
 fi
