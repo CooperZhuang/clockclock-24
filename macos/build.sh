@@ -1,15 +1,17 @@
 #!/bin/bash
 # 编译状态栏版 → build/ClockClock.app（ad-hoc 签名，无第三方依赖）
-# UNIVERSAL=1 同时编 arm64 + x86_64，产出通用二进制
+# ARCHS="arm64 x86_64" 编通用二进制；OUT=... 指定产物路径
 set -euo pipefail
 cd "$(dirname "$0")"
 
 WEB_PAGE="$(cd .. && pwd)/index.html"
-APP="build/ClockClock.app"
+APP="${OUT:-build/ClockClock.app}"
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Info.plist)"
 MIN_MACOS="13.0"
 
-if [ "${UNIVERSAL:-0}" = "1" ]; then ARCHS="arm64 x86_64"; else ARCHS="$(uname -m)"; fi
+if [ -z "${ARCHS:-}" ]; then
+  if [ "${UNIVERSAL:-0}" = "1" ]; then ARCHS="arm64 x86_64"; else ARCHS="$(uname -m)"; fi
+fi
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"

@@ -9,7 +9,7 @@
 单文件 HTML，零依赖零构建，双击就能跑；外加一个原生 macOS 状态栏版。
 
 **在线体验：** <https://cooperzhuang.github.io/clockclock-24/>  
-**下载 App：** [Releases](https://github.com/CooperZhuang/clockclock-24/releases) —— 状态栏版，Apple Silicon / Intel 通用，macOS 13+
+**下载 App：** [Releases](https://github.com/CooperZhuang/clockclock-24/releases) —— 状态栏版，macOS 13+。通用版（Apple Silicon + Intel）和 Apple Silicon 专版各有一个包
 
 ![浅色](docs/preview-light.png)
 
@@ -21,7 +21,14 @@
 
 ## 安装（macOS 状态栏版）
 
-从 [Releases](https://github.com/CooperZhuang/clockclock-24/releases) 下 `ClockClock-1.0.0.dmg`（或 `.zip`），把 `ClockClock.app` 拖进「应用程序」，打开后菜单栏右侧就会出现时钟。
+从 [Releases](https://github.com/CooperZhuang/clockclock-24/releases) 下载：
+
+| 包 | 适用 |
+| --- | --- |
+| `ClockClock-1.1.0.dmg` / `.zip` | 通用版，Apple Silicon + Intel |
+| `ClockClock-1.1.0-arm64.dmg` / `.zip` | Apple Silicon 专版，体积小一半左右 |
+
+打开 dmg 把 `ClockClock.app` 拖进「应用程序」，打开后菜单栏右侧就会出现时钟。
 
 首次打开可能被 Gatekeeper 拦（这个包是 ad-hoc 签名、没有做苹果公证）：右键点图标 →「打开」，或者
 
@@ -66,20 +73,24 @@ open build/ClockClock.app       # 跑到菜单栏里
 ./package.sh                    # 出可分发包：dist/ClockClock-1.0.0.zip / .dmg / SHA256SUMS.txt
 ```
 
-`package.sh` 会同时编 arm64 和 x86_64 再 lipo 成通用二进制，ad-hoc 签名。
+`package.sh` 会编两套：通用版（arm64 + x86_64 lipo）和 Apple Silicon 专版（arm64），各出 dmg/zip，再写 `SHA256SUMS.txt`；都是 ad-hoc 签名。
 
 点菜单栏上的时钟：
 
 | 菜单项 | 说明 |
 | --- | --- |
-| 显示秒 | 六位 HH:MM:SS（约 107pt 宽）↔ 四位 HH:MM（约 75pt） |
+| 显示秒 | 六位 HH:MM:SS ↔ 四位 HH:MM |
+| 显示冒号 | 在时/分、分/秒之间画冒号，`23:52:43` 这样（默认开） |
+| 冒号跳动 | 最后一个冒号跟着秒跳动（1 秒亮、1 秒灭）；前面的常亮。只有四位数时它自己就是最后一个 |
 | 平滑扫动 | 开：时:分 15 秒平滑转到位；关：每秒跳一格 |
-| 秒位平滑 | 默认关。开了秒位也做 0.8s 平滑——22pt 高度下一秒只走 6°、位移不到 1px，代价是重绘从 3 帧/秒涨到 10 帧/秒 |
+| 秒位平滑 | 默认关。开了秒位也做 0.8s 平滑——22pt 高度下一秒只走 6°、位移不到 1px，代价是重绘从 3 帧/秒涨到 9 帧/秒 |
+| 电池时秒位直接跳 | 默认开。插着电照「秒位平滑」走，切到电池就强制秒位直接落位省电 |
+| 旋转动画 | 机械（默认）/ 匀速 / 惯性 / 回弹 / 急停——时:分换字用的缓动曲线，秒位跳动也跟随 |
 | 开机自启 | 装 / 卸 `~/Library/LaunchAgents/com.cooper.clockclock-menubar.plist`（默认不装） |
 | 打开网页版 | 打开仓库根目录的 `index.html` |
 | 退出 | 关掉 |
 
-实测（2560×1440 @2x，`NSStatusBar.system.thickness = 22pt`）：状态栏项目宽 107pt（六位）/ 75pt（四位）；重绘 3 帧/秒、常驻 CPU 约 0.9%；15 秒扫动期间约 5.5%；开「秒位平滑」后重绘 10 帧/秒、CPU 约 4.7%。
+实测（2560×1440 @2x，`NSStatusBar.system.thickness = 22pt`）：状态栏项目宽 **116pt**（六位 + 冒号，图 109.6pt）、110pt（不画冒号）、81pt（四位 + 冒号）；重绘 3 帧/秒、常驻 CPU 约 0.9%；15 秒扫动期间约 5.5%；开「秒位平滑」后 9 帧/秒、CPU 约 4.7%。模拟电池供电（`CLOCKCLOCK_BATTERY=1`）时即使开着「秒位平滑」也回到 3 帧/秒。
 
 默认**不写任何日志**。要看调试信息用 `CLOCKCLOCK_LOG=1` 启动，日志落在 `/tmp/clockclock-menubar.log`。
 
