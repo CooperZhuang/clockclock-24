@@ -31,7 +31,14 @@ sed "s|__WEB_PAGE__|$WEB_PAGE|" Info.plist > "$APP/Contents/Info.plist"
 cp AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
-codesign --force --sign - --timestamp=none "$APP" >/dev/null 2>&1 || true
+if [ -n "${CODESIGN_ID:-}" ]; then
+  # 有 Developer ID 证书时：hardened runtime + 安全时间戳（公证的前提）
+  codesign --force --options runtime --timestamp --sign "$CODESIGN_ID" "$APP"
+  echo "  signed : $CODESIGN_ID"
+else
+  codesign --force --sign - --timestamp=none "$APP" >/dev/null 2>&1 || true
+  echo "  signed : ad-hoc（未公证，用户首次打开会被 Gatekeeper 拦）"
+fi
 
 echo "built: $APP"
 echo "  version: $VERSION"

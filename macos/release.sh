@@ -17,6 +17,9 @@ for a in "$@"; do
 done
 
 ./package.sh
+if [ -n "${CODESIGN_ID:-}" ]; then
+  ./notarize.sh          # 有开发者证书时：签名 + 公证 + staple
+fi
 
 # ---- 本地更新（每次发版都做）----
 INSTALL="/Applications/ClockClock.app"

@@ -35,18 +35,30 @@
 
 | 包 | 适用 |
 | --- | --- |
-| `ClockClock-1.2.0.dmg` | 通用版，Apple Silicon + Intel |
-| `ClockClock-1.2.0-arm64.dmg` | Apple Silicon 专版，体积小一半左右 |
+| `ClockClock-1.2.1.dmg` | 通用版，Apple Silicon + Intel |
+| `ClockClock-1.2.1-arm64.dmg` | Apple Silicon 专版，体积小一半左右 |
 
 打开 dmg 把 `ClockClock.app` 拖进「应用程序」，打开后菜单栏右侧就会出现时钟。
 
-首次打开可能被 Gatekeeper 拦（这个包是 ad-hoc 签名、没有做苹果公证）：右键点图标 →「打开」，或者
+### 首次打开被拦怎么办
+
+这些包是 **ad-hoc 签名、没有做苹果公证**——公证要 Apple Developer Program（99 美元/年），个人项目没买。所以从浏览器下载的 dmg 解出来的 app 带 quarantine 标记，首次打开会被 Gatekeeper 拦。
+
+**macOS 15 起右键「打开」的捷径已经被取消**，正确做法是：
+
+1. 先双击一次 ClockClock.app，看到「无法验证开发者」的提示后关掉
+2. 打开「系统设置 → 隐私与安全性」，拉到最下面，点「仍要打开 ClockClock」
+3. 再启动一次，弹窗里点「打开」
+
+或者直接抹掉标记（等效，少点几次）：
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/ClockClock.app
 ```
 
-不想下二进制也可以自己编：`cd macos && ./build.sh`（要 Command Line Tools，不需要 Xcode）。
+想彻底没有这一步，只能走 Developer ID 签名 + 公证：`macos/notarize.sh` 已经写好了（前置是开发者账号、Developer ID Application 证书、以及 app 专用密码或 API 密钥），跑完出的 dmg 别人双击就能开。
+
+另外两种情况不会有弹窗：`brew` 或 `curl` 下载的文件不带 quarantine 标记；从源码自己编的包也不带（`cd macos && ./build.sh`，要 Command Line Tools，不需要 Xcode）。
 
 ## 运行（网页版）
 
@@ -155,6 +167,7 @@ macos/AppIcon.icns      # 图标（make-icon.py 生成）
 macos/build.sh          # swiftc 编译 + ad-hoc 签名 → build/ClockClock.app
 macos/package.sh        # 通用版 + arm64 版 dmg + SHA256SUMS → dist/
 macos/release.sh        # 发版：打包 + 本地更新 + tag/push/Release
+macos/notarize.sh       # 有开发者账号时：Developer ID 签名 + 公证 + staple
 ```
 
 MIT License。
