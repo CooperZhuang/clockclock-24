@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#f4f1ec" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#f2efe8" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0a0a0b" media="(prefers-color-scheme: dark)">
 <title>ClockClock</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%23111'/%3E%3Cpath d='M16 16V5M16 16h8' stroke='%23f5f3ef' stroke-width='3.4' stroke-linecap='round'/%3E%3C/svg%3E">
@@ -23,9 +23,13 @@
                     0 3px 10px rgba(46, 38, 26, 0.06),
                     0 0 0 1px rgba(46, 38, 26, 0.05);
     --ease: cubic-bezier(0.62, 0.02, 0.28, 1);
-    --turn: 30s;          /* 一圈走完用掉半分钟：0-30s 在转，30-60s 静止 */
-    --cell: min(9.7vw, 22.4vh);
-    --cell: min(9.7vw, 22.4svh);
+
+    /* 时:分 换字用 15s 慢慢转；秒位每 1s 转 0.8s、停 0.2s */
+    --turn-min: 15s;
+    --turn-sec: 0.8s;
+
+    --cell: min(6.7vw, 22.4vh);
+    --cell: min(6.7vw, 22.4svh);
     --pad: calc(var(--cell) * 0.38);
   }
 
@@ -60,13 +64,9 @@
     -webkit-font-smoothing: antialiased;
   }
 
-  .stage { position: relative; display: grid; place-items: center; }
-
   .clock {
-    display: grid;
-    grid-template-columns: repeat(8, var(--cell));
-    grid-template-rows: repeat(3, var(--cell));
-    gap: calc(var(--cell) * 0.08);
+    display: flex;
+    gap: calc(var(--cell) * 0.42);      /* 时:分 与 秒 之间留出冒号的位置 */
     padding: var(--pad);
     border-radius: calc(var(--cell) * 0.2);
     background: var(--board);
@@ -74,6 +74,15 @@
     user-select: none;
     -webkit-tap-highlight-color: transparent;
   }
+
+  .group {
+    display: grid;
+    grid-template-columns: repeat(8, var(--cell));
+    grid-template-rows: repeat(3, var(--cell));
+    gap: calc(var(--cell) * 0.08);
+  }
+
+  .group--sec { grid-template-columns: repeat(4, var(--cell)); }
 
   .face {
     position: relative;
@@ -94,9 +103,12 @@
     position: absolute;
     inset: 0;
     transform-origin: 50% 50%;
-    transition: transform var(--turn) var(--ease);
+    transition: transform var(--turn-min) var(--ease);
     will-change: transform;
   }
+
+  /* 秒位：每格只给 0.8s，转完停一下等下秒 */
+  .face.fast .pivot { transition-duration: var(--turn-sec); }
 
   .hand {
     position: absolute;
@@ -120,95 +132,20 @@
     background: var(--pin);
   }
 
-  /* 秒表读数：宽屏时落在面板下沿的内边距里，窄屏时退到面板下方 */
-  .timer {
-    position: absolute;
-    left: 50%;
-    top: calc(100% + var(--pad) * 0.5);
-    transform: translateX(-50%);
-    font: 300 clamp(13px, calc(var(--cell) * 0.22), 110px) / 1 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-    font-variant-numeric: tabular-nums;
-    letter-spacing: -0.01em;
-    color: var(--ink);
-    opacity: 0.4;
-    white-space: nowrap;
-    cursor: pointer;
-    user-select: none;
-    -webkit-tap-highlight-color: transparent;
-    transition: opacity 0.2s var(--ease);
-  }
-
-  .timer:hover { opacity: 0.66; }
-  .timer__cs { margin-left: 0.06em; font-size: 0.62em; opacity: 0.72; }
-  .timer[hidden] { display: none; }
-
-  @media (min-width: 780px) and (min-height: 460px) {
-    .timer { top: auto; bottom: calc(var(--pad) * 0.16); }
-  }
-
-  .toggle {
-    position: fixed;
-    right: max(14px, env(safe-area-inset-right));
-    bottom: max(12px, env(safe-area-inset-bottom));
-    padding: 9px;
-    border: 0;
-    background: none;
-    color: var(--ink);
-    opacity: 0.28;
-    cursor: pointer;
-    transition: opacity 0.25s var(--ease);
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  .toggle:hover,
-  .toggle:focus-visible { opacity: 0.85; }
-  .toggle[aria-pressed="true"] { opacity: 0.5; }
-  .toggle:focus-visible { outline: 1px solid currentColor; outline-offset: 4px; border-radius: 999px; }
-
-  .toggle__track {
-    position: relative;
-    display: block;
-    width: 34px;
-    height: 19px;
-    border: 1px solid currentColor;
-    border-radius: 999px;
-  }
-
-  .toggle__knob {
-    position: absolute;
-    top: 50%;
-    left: 3px;
-    width: 11px;
-    height: 11px;
-    margin-top: -5.5px;
-    border-radius: 50%;
-    background: currentColor;
-    transition: transform 0.22s var(--ease);
-  }
-
-  .toggle[aria-pressed="true"] .toggle__knob { transform: translateX(15px); }
-
-  /* before the first sweep the hands are set without transition */
-  .boot .pivot,
-  .no-anim .pivot { transition: none; }
+  /* 首帧和从前台切回来时：不要过渡，直接落位（放在 .fast 规则之后才压得住它） */
+  .clock.boot .pivot,
+  .clock.no-anim .pivot { transition: none; }
 
   @media (prefers-reduced-motion: reduce) {
-    :root { --turn: 240ms; }
-    .toggle__knob { transition: none; }
+    :root { --turn-min: 300ms; --turn-sec: 120ms; }
   }
 </style>
 </head>
 <body>
-  <div class="stage">
-    <main class="clock boot" id="clock" role="img" aria-label="ClockClock"></main>
-    <div class="timer" id="timer" hidden title="点击开始 / 暂停，双击归零">
-      <span class="timer__main">00:00</span><span class="timer__cs">.00</span>
-    </div>
-  </div>
-
-  <button class="toggle" id="toggle" type="button" aria-pressed="false" aria-label="秒表" title="秒表">
-    <span class="toggle__track"><span class="toggle__knob"></span></span>
-  </button>
+  <main class="clock boot" id="clock" role="img" aria-label="ClockClock">
+    <div class="group" id="hhmm"></div>
+    <div class="group group--sec" id="ss"></div>
+  </main>
 
 <script>
 (() => {
@@ -232,13 +169,14 @@
     [[E, S], [S, W], [N, E], [N, S], [E, E], [N, W]]  // 9
   ];
 
-  const COLS = 8, ROWS = 3, FACES = COLS * ROWS;
+  const ROWS = 3, COLS_MAIN = 8, COLS_SEC = 4;
+  const FACES = COLS_MAIN * ROWS + COLS_SEC * ROWS;   // 24 + 12
   const clock = document.getElementById('clock');
   const pivots = [];
 
-  for (let i = 0; i < FACES; i++) {
+  function buildFace(host, fast) {
     const face = document.createElement('div');
-    face.className = 'face';
+    face.className = fast ? 'face fast' : 'face';
     const pair = [0, 1].map(() => {
       const pivot = document.createElement('div');
       pivot.className = 'pivot';
@@ -247,24 +185,33 @@
       return pivot;
     });
     face.appendChild(Object.assign(document.createElement('b'), { className: 'pin' }));
-    clock.appendChild(face);
+    host.appendChild(face);
     pivots.push(pair);
   }
 
-  // clock index for every digit/clock slot: row-major faces, 2 columns per digit
-  const faceMap = [0, 1, 2, 3].map((digit) => {
+  const hhmm = document.getElementById('hhmm');
+  const ss = document.getElementById('ss');
+  for (let i = 0; i < COLS_MAIN * ROWS; i++) buildFace(hhmm, false);
+  for (let i = 0; i < COLS_SEC * ROWS; i++) buildFace(ss, true);
+
+  // clock index for every digit/clock slot, per group: row-major, 2 columns per digit
+  const faceMap = [];
+  for (let d = 0; d < 4; d++) {
     const slots = [];
-    for (let k = 0; k < 6; k++) {
-      slots.push(((k / 2) | 0) * COLS + digit * 2 + (k % 2));
-    }
-    return slots;
-  });
+    for (let k = 0; k < 6; k++) slots.push(((k / 2) | 0) * COLS_MAIN + d * 2 + (k % 2));
+    faceMap.push(slots);
+  }
+  for (let d = 4; d < 6; d++) {
+    const slots = [];
+    for (let k = 0; k < 6; k++) slots.push(COLS_MAIN * ROWS + ((k / 2) | 0) * COLS_SEC + (d - 4) * 2 + (k % 2));
+    faceMap.push(slots);
+  }
 
   const angle = new Float64Array(FACES * 2);
 
-  function setTime(hhmm, spin) {
-    for (let d = 0; d < 4; d++) {
-      const glyph = GLYPHS[Number(hhmm[d])];
+  function setDigits(hhmmss, from, to, spin) {
+    for (let d = from; d <= to; d++) {
+      const glyph = GLYPHS[Number(hhmmss[d])];
       const slots = faceMap[d];
       for (let k = 0; k < 6; k++) {
         const index = slots[k];
@@ -272,7 +219,7 @@
           const slot = index * 2 + h;
           const current = ((angle[slot] % 360) + 360) % 360;
           let delta = ((glyph[k][h] - current) % 360 + 360) % 360;
-          if (spin) delta += 360;        // every hand always turns clockwise
+          if (spin) delta += 360;      // 时分位每次换字都顺时针兜一整圈
           angle[slot] += delta;
           pivots[index][h].style.transform = `rotate(${angle[slot]}deg)`;
         }
@@ -280,34 +227,41 @@
     }
   }
 
-  const pad = (n) => String(n).padStart(2, '0');
-  const stamp = (date) => pad(date.getHours()) + pad(date.getMinutes());
+  const pad2 = (n) => String(n).padStart(2, '0');
+  const stamp = (date) => pad2(date.getHours()) + pad2(date.getMinutes()) + pad2(date.getSeconds());
+  const readable = (t) => `${t.slice(0, 2)}:${t.slice(2, 4)}:${t.slice(4, 6)}`;
+
+  let minute = '';
 
   function paint(date, spin) {
     const time = stamp(date);
-    setTime(time, spin);
-    const readable = `${time.slice(0, 2)}:${time.slice(2)}`;
-    clock.setAttribute('aria-label', `ClockClock ${readable}`);
-    document.title = readable;
+    if (time.slice(0, 4) !== minute) {
+      minute = time.slice(0, 4);
+      setDigits(time, 0, 3, spin);
+      document.title = `${time.slice(0, 2)}:${time.slice(2, 4)}`;
+    }
+    setDigits(time, 4, 5, false);
+    clock.setAttribute('aria-label', 'ClockClock ' + readable(time));
   }
 
   const params = new URLSearchParams(location.search);
   const frozen = params.get('at');
   const still = matchMedia('(prefers-reduced-motion: reduce)');
-  const paused = frozen && /^([01]\d|2[0-3])[0-5]\d$/.test(frozen);   // ?at=HHMM
+  const paused = frozen && /^\d{4}(\d{2})?$/.test(frozen);
 
-  // ?turn=<seconds> — how long one whole sweep takes (default 30, i.e. half a minute)
+  // ?turn=<秒> 时分位换字时长，?tick=<秒> 秒位每格时长
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
   const turn = Number(params.get('turn'));
-  if (turn > 0 && !still.matches) {
-    document.documentElement.style.setProperty('--turn', `${Math.min(60, Math.max(0.2, turn))}s`);
-  }
+  const tick = Number(params.get('tick'));
+  const root = document.documentElement.style;
+  if (turn > 0) root.setProperty('--turn-min', clamp(turn, 0.3, 60) + 's');
+  if (tick > 0) root.setProperty('--turn-sec', clamp(tick, 0.05, 5) + 's');
 
   let timer = 0;
 
   function schedule() {
     clearTimeout(timer);
-    const now = new Date();
-    const wait = 60000 - (now.getSeconds() * 1000 + now.getMilliseconds()) + 20;
+    const wait = 1000 - new Date().getMilliseconds() + 6;
     timer = setTimeout(() => {
       paint(new Date(), !still.matches);
       schedule();
@@ -316,20 +270,28 @@
 
   if (paused) {
     // static frame for screenshots: no transition at all
-    paint(new Date(2000, 0, 1, Number(frozen.slice(0, 2)), Number(frozen.slice(2))), false);
+    const t = frozen.length === 4 ? frozen + '00' : frozen;
+    minute = t.slice(0, 4);
+    setDigits(t, 0, 5, false);
+    document.title = `${t.slice(0, 2)}:${t.slice(2, 4)}`;
+    clock.setAttribute('aria-label', 'ClockClock ' + readable(t));
   } else {
-    // boot: every hand starts at twelve, then the whole display sweeps to now
+    // boot: 秒位先落位，时分位从 12 点慢慢扫到当前时间
+    const now = new Date();
+    setDigits(stamp(now), 4, 5, false);
     requestAnimationFrame(() => {
-      clock.classList.remove('boot');            // transitions become live
-      requestAnimationFrame(() => paint(new Date(), !still.matches));
+      clock.classList.remove('boot');
+      requestAnimationFrame(() => {
+        paint(new Date(), !still.matches);
+        schedule();
+      });
     });
-    schedule();
 
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
         clearTimeout(timer);
       } else {
-        // back from the background: jump instead of spending another half minute turning
+        // 切回前台直接落位，别又转十几秒才读得出时间
         clock.classList.add('no-anim');
         paint(new Date(), false);
         void clock.offsetWidth;
@@ -338,77 +300,6 @@
       }
     });
   }
-  /* ---------- 秒表（开关控制，叠在面板上） ---------- */
-  const timerEl = document.getElementById('timer');
-  const timerMain = timerEl.querySelector('.timer__main');
-  const timerCs = timerEl.querySelector('.timer__cs');
-  const toggleEl = document.getElementById('toggle');
-  const STORE = 'clockclock.stopwatch';
-
-  let spent = 0;        // ms accumulated while stopped
-  let since = 0;        // performance.now() at the last start
-  let running = false;
-  let rafId = 0;
-  let shown = false;
-
-  const pref = {
-    // 第一次打开就叠上秒表；之后记住用户自己拨的开关位置
-    get() { try { const v = localStorage.getItem(STORE); return v === null ? true : v === '1'; } catch (e) { return true; } },
-    set(on) { try { localStorage.setItem(STORE, on ? '1' : '0'); } catch (e) { /* private mode */ } }
-  };
-
-  function drawTimer() {
-    const cs = Math.floor((spent + (running ? performance.now() - since : 0)) / 10);
-    timerMain.textContent =
-      String(Math.floor(cs / 6000)).padStart(2, '0') + ':' +
-      String(Math.floor(cs / 100) % 60).padStart(2, '0');
-    timerCs.textContent = '.' + String(cs % 100).padStart(2, '0');
-  }
-
-  function frame() { drawTimer(); rafId = requestAnimationFrame(frame); }
-
-  function startTimer() {
-    if (running || !shown) return;
-    running = true;
-    since = performance.now();
-    rafId = requestAnimationFrame(frame);
-  }
-
-  function pauseTimer() {
-    if (!running) return;
-    spent += performance.now() - since;
-    running = false;
-    cancelAnimationFrame(rafId);
-    drawTimer();
-  }
-
-  function resetTimer() {
-    cancelAnimationFrame(rafId);
-    running = false;
-    spent = 0;
-    drawTimer();
-  }
-
-  function showTimer(on) {
-    shown = on;
-    timerEl.hidden = !on;
-    toggleEl.setAttribute('aria-pressed', String(on));
-    pref.set(on);
-    if (on) { resetTimer(); startTimer(); } else { pauseTimer(); }
-  }
-
-  toggleEl.addEventListener('click', () => showTimer(!shown));
-  timerEl.addEventListener('click', () => (running ? pauseTimer() : startTimer()));
-  timerEl.addEventListener('dblclick', resetTimer);
-  document.addEventListener('keydown', (e) => {
-    if (e.metaKey || e.ctrlKey || e.altKey) return;
-    const key = e.key.toLowerCase();
-    if (key === 's') showTimer(!shown);
-    else if (key === ' ' && shown) { e.preventDefault(); running ? pauseTimer() : startTimer(); }
-    else if (key === 'r' && shown) resetTimer();
-  });
-
-  showTimer(pref.get());
 })();
 </script>
 </body>
