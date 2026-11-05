@@ -240,6 +240,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     statusItem.button?.toolTip = "ClockClock"
 
     buildMenu()
+    refreshMenuStates()          // 让「秒位平滑」在平滑扫动关闭时就是灰的
     applyStateNow()
     scheduleTick()
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in self?.reportFrame() }
