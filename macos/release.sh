@@ -46,4 +46,20 @@ if [ "$PUBLISH" = "--publish" ]; then
     "../dist/ClockClock-$VERSION-arm64.dmg" \
     "../dist/SHA256SUMS.txt" \
     --title "ClockClock $VERSION" --notes-file "$NOTES"
+
+  # ---- 同步 Homebrew tap（版本号 + 通用版 dmg 的 sha256）----
+  TAP_DIR="${CLOCKCLOCK_TAP:-$HOME/Documents/Code/Personal/homebrew-tap}"
+  if [ -d "$TAP_DIR/.git" ]; then
+    SUM="$(shasum -a 256 "../dist/ClockClock-$VERSION.dmg" | cut -d' ' -f1)"
+    python3 - "$TAP_DIR/Casks/clockclock.rb" "$VERSION" "$SUM" <<'TAPPATCH'
+import re, sys
+path, ver, sha = sys.argv[1], sys.argv[2], sys.argv[3]
+s = open(path).read()
+s = re.sub(r'version "[^"]*"', f'version "{ver}"', s, count=1)
+s = re.sub(r'sha256 "[^"]*"', f'sha256 "{sha}"', s, count=1)
+open(path, "w").write(s)
+print("tap cask ->", ver)
+TAPPATCH
+    (cd "$TAP_DIR" && git add -A && git commit -q -m "cask: clockclock $VERSION" && git push -q origin main && echo "tap 已推送") || true
+  fi
 fi

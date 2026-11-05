@@ -31,6 +31,16 @@
 
 ## 安装（macOS 状态栏版）
 
+### 用 Homebrew 装（推荐，不会弹「无法验证开发者」）
+
+```bash
+brew install --cask CooperZhuang/tap/clockclock
+```
+
+tap 在 [CooperZhuang/homebrew-tap](https://github.com/CooperZhuang/homebrew-tap)。cask 装完会顺手抹掉 quarantine 标记，所以首次打开不用点「仍要打开」；之后 `brew upgrade --cask clockclock` 升级，`brew uninstall --cask clockclock` 卸载。
+
+### 直接下 dmg
+
 从 [Releases](https://github.com/CooperZhuang/clockclock-24/releases) 下载：
 
 | 包 | 适用 |
